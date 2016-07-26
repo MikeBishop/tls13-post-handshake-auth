@@ -50,17 +50,14 @@ This document describes a mechanism for performing post-handshake certificate-ba
 
 # Introduction
 
-This document defines a way to authenticate one party of a Transport Layer Security (TLS) communication to another using a certificate after the session has been established. This allows both the client and server elicit proof of ownership of additional identities at any time after the handshake has completed. It also allows for both the client and server to spontaneously provide a certificate and proof of ownership of the private key to the other party.
+This document defines a way to authenticate one party of a Transport Layer Security (TLS) communication to another using a certificate after the session has been established. This allows both the client and server to elicit proof of ownership of additional identities at any time after the handshake has completed. It also allows for both the client and server to spontaneously provide a certificate and proof of ownership of the private key to the other party.
 
 This mechanism is useful in the following situations:
 
-This document defines a way to authenticate one party of a Transport Layer Security (TLS) communication to another using a certificate after the session has been established. This allows both the client and server elicit proof of ownership of additional identities at any time after the handshake has completed. It also allows for both the client and server to spontaneously provide a certificate and proof of ownership of the private key to the other party.
-
-* This mechanism is useful in the following situations:
 * servers that have the ability to serve requests from multiple domains over the same connection but do not have a certificate that is simultaneously authoritative over all of them
 * servers that have resources that require client authentication to access and need to request client authentication after the connection has started
 * clients that want to assert their identity to a server after a connection has been established
-* clients that want a server to re-prove ownership of their private key during a connection
+* clients that want a server to re-prove ownership of their private key during a connection or after a resumption
 * clients that wish to ask a server to authenticate for a new domain not covered by the initial connection certificate 
 
 This document intends to replace much of the functionality of secure renegotiation in previous versions of TLS. It has the advantages over secure renegotiation of only requiring one round trip and maintaining the same application keys during a connection.
@@ -82,7 +79,7 @@ We define a pair of new TLS extensions to advertise support for post-handshake a
 	  }
 	} ClientAuth;
 
-The client advertises every type of client authentication it supports in ClientAuth extension in its ClientHello. The server replies with an EncryptedExtensions containing a ClientAuth extension containing a list of client authentication types and the list of signature schemes supported. The set of ClientAuthTypes in the server’s ClientAuth extension MUST be a subset of the set sent by the client. The extension may be omitted if the server does not support any form of post-handshake client authentication.
+The client advertises every type of client authentication it supports in ClientAuth extension in its ClientHello. The server replies with an EncryptedExtensions containing a ClientAuth extension containing a list of client authentication types and the list of signature schemes supported. The set of ClientAuthTypes in the server’s ClientAuth extension MUST be a subset of the set sent by the client. The extension MAY be omitted if the server does not support any form of post-handshake client authentication.
 
 ### Server Authentication Extensions
 
@@ -93,7 +90,7 @@ The ServerAuth hello extension is used to negotiate support for post-handshake s
 	  ServerAuthType server_auth_types<0..2^16-1>;
 	} ServerAuth;
 
-   The client advertises every type of server authentication it supports in its ClientHello. The server replies with EncryptedExtensions containing a ServerAuth extension containing a list of server authentication types. The set of ServerAuthTypes in the server’s ServerAuth extension MUST be a subset of the set sent by the client. The extension may be omitted if the server does not support any form of post-handshake server authentication.
+   The client advertises every type of server authentication it supports in its ClientHello. The server replies with EncryptedExtensions containing a ServerAuth extension containing a list of server authentication types. The set of ServerAuthTypes in the server’s ServerAuth extension MUST be a subset of the set sent by the client. The extension MAY be omitted if the server does not support any form of post-handshake server authentication.
 
 ## Post-Handshake Authentication Messages
 
@@ -139,9 +136,9 @@ The certificate message is used to transport the certificate. It mirrors the Cer
 	  } Extensions;
 	} Certificate;
 
-Valid extensions include OCSP Status extensions ([RFC6066] and [RFC6961]) and SignedCertificateTimestamps ([RFC6962]). These extension must only be presented if the handshake negotiation these extensions to be presented in the EncryptedExtensions message.
+Valid extensions include OCSP Status extensions ([RFC6066] and [RFC6961]) and SignedCertificateTimestamps ([RFC6962]). These extension MUST only be presented if the handshake negotiation permits these extensions to be presented in the EncryptedExtensions message.
 
-The certificate_request_context is an opaque string that identifies the certificate. If the certificate is used in response to a CertificateRequest, it must mirror the certificate_request_context sent in the CertificateRequest. If the Certificate message is part of an elicited authentication, the certificate_request_context is chosen uniquely by the sender.
+The certificate_request_context is an opaque string that identifies the certificate. If the certificate is used in response to a CertificateRequest, it MUST mirror the certificate_request_context sent in the CertificateRequest. If the Certificate message is part of an elicited authentication, the certificate_request_context is chosen uniquely by the sender.  Exchanges initiated by the client use odd-numbered certificate_request_context values, while exchanges initiated by the server use even-numbered certificate_request_context values.
 
 ### CertificateVerify Message
 
@@ -173,15 +170,15 @@ There are four post-handshake authentication exchanges.
 
 ### Elicited Client Authentication Flow
 
-This flow is initiated by a CertificateRequest message from the server to the client. It should only be sent if the server’s EncryptedExtensions contains a ClientAuth extension with an odd-valued certificate_request_context. Upon receiving a CertificateRequest message, the client may respond a contiguous sequence:
+This flow is initiated by a CertificateRequest message from the server to the client with an even-valued certificate_request_context. It MUST only be sent if the server’s EncryptedExtensions contains a ClientAuth extension. Upon receiving a CertificateRequest message, the client SHOULD respond with a contiguous sequence:
 
 Certificate, CertificateVerify, Finished
 
-or the sequence:
+or MAY respond with the sequence:
 
 Certificate, Finished
 
-where the Certificate message has an empty certificate_list field. The Certificate message must contain the same certificate_request_context as the CertificateRequest message. Non-empty Certificate messages should conform to the certificate_authorities and certificate_extensions sent in the CertificateRequest.
+where the Certificate message has an empty certificate_list field. The Certificate message MUST contain the same certificate_request_context as the CertificateRequest message. Non-empty Certificate messages SHOULD conform to the certificate_authorities and certificate_extensions sent in the CertificateRequest.
 
 	<- CertificateRequest
 	-> Certificate, CertificateVerify, Finished
@@ -190,21 +187,21 @@ Because client authentication may require prompting the user, servers MUST be pr
 
 ### Spontaneous Client Authentication Flow
 
-This flow is initiated by a contiguous sequence of Certificate, CertificateVerify, Finished message from the client to the server. The Certificate message should contain an odd-valued certificate_request_context so as not to collide with an elicited client authentication. The Certificate message should conform to the certificate_authorities and certificate_extensions sent in the CertificateRequest and the SignatureSchemes presented in the ClientAuth extension from the server’s EncryptedExtensions message.
+This flow is initiated by a contiguous sequence of Certificate, CertificateVerify, Finished message from the client to the server. The Certificate message MUST contain an odd-valued certificate_request_context so as not to collide with an elicited client authentication. The Certificate message SHOULD conform to the SignatureSchemes presented in the ClientAuth extension from the server’s EncryptedExtensions message.
 
 	-> Certificate, CertificateVerify, Finished
 
 ### Elicited Server Authentication Flow
 
-This flow is initiated by a CertificateRequest message from the client to the server. The CertificateRequest should contain an even-valued certificate_request_context. Upon receiving a CertificateRequest message, the server may respond with either a certificate with a contiguous sequence of:
+This flow is initiated by a CertificateRequest message from the client to the server. The CertificateRequest MUST contain an odd-valued certificate_request_context. Upon receiving a CertificateRequest message, the server SHOULD respond with a contiguous sequence of:
 
 Certificate, CertificateVerify, Finished
 
-or the sequence:
+or MAY respond with the sequence:
 
 Certificate, Finished
 
-where the Certificate message has an empty certificate_list field. The Certificate message must contain the same certificate_request_context as the CertificateRequest message. The Certificate message should conform to the ServerNameList sent in the CertificateRequest and the SignatureSchemes presented in the ClientHello.
+where the Certificate message has an empty certificate_list field. The Certificate message MUST contain the same certificate_request_context as the CertificateRequest message. The Certificate message SHOULD conform to the ServerNameList sent in the CertificateRequest and the SignatureSchemes presented in the ClientHello.
 
 	-> CertificateRequest
 	<- Certificate, CertificateVerify, Finished
@@ -213,13 +210,13 @@ Clients MUST be prepared for some delay, including receiving an arbitrary number
 
 ### Spontaneous Server Authentication Flow
 
-This flow is initiated by a contiguous sequence of Certificate, CertificateVerify, Finished message from the server to the client. The Certificate message should contain an even-valued certificate_request_context so as not to collide with an elicited server authentication. The Certificate message should conform to the SignatureSchemes presented in the ClientHello.
+This flow is initiated by a contiguous sequence of Certificate, CertificateVerify, Finished message from the server to the client. The Certificate message MUST contain an even-valued certificate_request_context so as not to collide with an elicited server authentication. The Certificate message MUST conform to the SignatureSchemes presented in the ClientHello.
 
 	<- Certificate, CertificateVerify, Finished
 
-Interaction between resumption
+## Interaction between resumption
 
-Certificate identity should not be maintained across resumption. If a connection is resumed, additional certificate identities for both client and server certificates should be forgotten.
+Certificate identities established post-handshake should not be maintained across resumption. If a connection is resumed, additional certificate identities for both client and server certificates MUST NOT be automatically persisted, but MAY be elicited again immediately post-handshake.
 
 # Acknowledgements {#ack}
 
